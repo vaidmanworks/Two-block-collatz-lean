@@ -1,0 +1,32 @@
+name: Lean build and axiom check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs elan and the pinned toolchain, fetches Mathlib's prebuilt files, and runs `lake build`.
+      - uses: leanprover/lean-action@v1
+
+      - name: Check the axioms
+        run: |
+          lake env lean Check.lean | tee axioms.txt
+          if grep -q "sorryAx" axioms.txt; then
+            echo "A proof uses sorry."
+            exit 1
+          fi
+          bad=$(grep "depends on axioms" axioms.txt \
+            | grep -vE "depends on axioms: \[(propext|Classical\.choice|Quot\.sound)(, (propext|Classical\.choice|Quot\.sound))*\]$" \
+            || true)
+          if [ -n "$bad" ]; then
+            echo "Results with non-standard axioms:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "All $(grep -c 'depends on axioms' axioms.txt) checked results use only propext, Classical.choice and Quot.sound."
